@@ -54,7 +54,8 @@ USER QUERY (paste this after):
 
 Equivalent natural language (what you'd normally type):
 
-"Can you help me build a RAG-based pipeline for drug discovery using Python, LangChain, and ChromaDB? I want to use PubMed abstracts, ChEMBL compound data, and PDB protein structures as data sources. Use BioBERT for embeddings, ChromaDB as the vector database, and GPT-4 as the LLM. Chunk size should be 512 tokens. I need citation tracking, molecule-aware retrieval, and protein context features. Please provide production-ready code with an architecture diagram and Docker Compose setup."
+"Can you help me build a RAG-based pipeline for drug discovery using Python, LangChain, and ChromaDB? I want to use PubMed abstracts, ChEMBL\br compound data, and PDB protein structures as data sources. Use BioBERT for embeddings, ChromaDB as the vector database, and GPT-4 as the LLM. \br
+Chunk size should be 512 tokens. I need citation tracking, molecule-aware retrieval, and protein context features. Please provide production-ready \br code with an architecture diagram and Docker Compose setup."
 
 Token comparison:
 
