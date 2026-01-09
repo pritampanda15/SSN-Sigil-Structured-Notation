@@ -2,11 +2,31 @@
 SSN Natural Language Converter
 
 Converts natural language queries to SSN format for token-efficient LLM communication.
+Supports both simple queries and complex structured prompts (markdown-based).
 """
 
 import re
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass, field
+from enum import Enum
+
+
+class PromptType(Enum):
+    """Type of input prompt."""
+    SIMPLE_QUERY = "simple"
+    STRUCTURED_PROMPT = "structured"
+
+
+@dataclass
+class ParsedSection:
+    """A parsed section from a structured prompt."""
+    level: int  # Header level (1-6) or 0 for root
+    title: str
+    content: List[str]  # Raw content lines
+    subsections: List['ParsedSection'] = field(default_factory=list)
+    bullets: List[str] = field(default_factory=list)
+    numbered_items: List[str] = field(default_factory=list)
+    key_values: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -297,6 +317,406 @@ class NLToSSN:
         return [self.convert(q, context) for q in queries]
 
 
+class StructuredPromptConverter:
+    """
+    Convert complex structured prompts (markdown-based) to SSN format.
+
+    Handles:
+    - Markdown headers (# ## ###)
+    - Bullet lists (* -)
+    - Numbered lists (1. 2. 3.)
+    - Bold/emphasis for key terms
+    - Code blocks
+    - Nested structures
+
+    Example:
+        >>> converter = StructuredPromptConverter()
+        >>> ssn = converter.convert('''
+        ... # Task: Build a RAG System
+        ...
+        ... ## Requirements
+        ... * Support multi-hop reasoning
+        ... * Handle uncertainty
+        ...
+        ... ## Data Sources
+        ... * PubMed
+        ... * DrugBank
+        ... ''')
+    """
+
+    # Role keywords for detecting persona/role definitions
+    ROLE_KEYWORDS = [
+        "you are", "act as", "behave as", "role:", "persona:",
+        "senior", "expert", "specialist", "architect", "engineer"
+    ]
+
+    # Task keywords for detecting main objectives
+    TASK_KEYWORDS = [
+        "task is to", "your task", "objective", "goal", "design",
+        "implement", "create", "build", "develop", "analyze"
+    ]
+
+    # Requirement keywords
+    REQUIREMENT_KEYWORDS = [
+        "must", "should", "require", "need", "essential", "critical",
+        "important", "necessary", "mandatory"
+    ]
+
+    # Domain keyword mappings
+    DOMAIN_KEYWORDS = {
+        "drug_discovery": ["drug", "pharmaceutical", "compound", "ligand", "admet", "binding"],
+        "bioinformatics": ["protein", "gene", "genomic", "sequence", "molecular", "biological"],
+        "machine_learning": ["model", "training", "neural", "deep learning", "ml", "ai"],
+        "nlp": ["language", "text", "embedding", "transformer", "llm", "rag"],
+        "data_engineering": ["pipeline", "etl", "database", "indexing", "retrieval"],
+        "scientific": ["research", "hypothesis", "evidence", "literature", "citation"],
+    }
+
+    def __init__(self):
+        self.indent_size = 2
+
+    def _strip_blockquotes(self, text: str) -> str:
+        """Remove blockquote markers (>) from text."""
+        lines = text.split('\n')
+        stripped = []
+        for line in lines:
+            # Remove leading > and optional space
+            if line.startswith('> '):
+                stripped.append(line[2:])
+            elif line.startswith('>'):
+                stripped.append(line[1:])
+            else:
+                stripped.append(line)
+        return '\n'.join(stripped)
+
+    def detect_prompt_type(self, text: str) -> PromptType:
+        """Detect whether input is a simple query or structured prompt."""
+        # First strip blockquotes if present
+        if text.strip().startswith('>'):
+            text = self._strip_blockquotes(text)
+
+        lines = text.strip().split('\n')
+
+        # Indicators of structured prompt
+        has_headers = any(re.match(r'^\s*#{1,6}\s+', line) for line in lines)
+        has_bullets = sum(1 for line in lines if re.match(r'^\s*[\*\-]\s+', line)) > 2
+        has_numbered = sum(1 for line in lines if re.match(r'^\s*\d+\.\s+', line)) > 2
+        has_sections = text.count('---') >= 2
+        line_count = len([l for l in lines if l.strip()])
+
+        # If multiple structural elements, it's structured
+        if has_headers and (has_bullets or has_numbered or has_sections):
+            return PromptType.STRUCTURED_PROMPT
+        if line_count > 10 and (has_bullets or has_numbered):
+            return PromptType.STRUCTURED_PROMPT
+        if has_headers and line_count > 5:
+            return PromptType.STRUCTURED_PROMPT
+
+        return PromptType.SIMPLE_QUERY
+
+    def parse_markdown(self, text: str) -> ParsedSection:
+        """Parse markdown text into structured sections."""
+        # Strip blockquotes if present
+        if text.strip().startswith('>'):
+            text = self._strip_blockquotes(text)
+
+        lines = text.strip().split('\n')
+        root = ParsedSection(level=0, title="root", content=[])
+
+        current_section = root
+        section_stack = [root]
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            # Skip horizontal rules
+            if stripped == '---' or stripped == '***':
+                i += 1
+                continue
+
+            # Check for headers
+            header_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+            if header_match:
+                level = len(header_match.group(1))
+                title = header_match.group(2).strip()
+
+                # Remove numbering like "1." or "1:" from title
+                title = re.sub(r'^\d+[\.\:]\s*', '', title)
+
+                new_section = ParsedSection(level=level, title=title, content=[])
+
+                # Find parent section
+                while section_stack and section_stack[-1].level >= level:
+                    section_stack.pop()
+
+                if section_stack:
+                    section_stack[-1].subsections.append(new_section)
+
+                section_stack.append(new_section)
+                current_section = new_section
+                i += 1
+                continue
+
+            # Check for bullet points
+            bullet_match = re.match(r'^\s*[\*\-]\s+(.+)$', stripped)
+            if bullet_match:
+                bullet_text = bullet_match.group(1).strip()
+                # Handle nested bullets (check indentation)
+                current_section.bullets.append(bullet_text)
+                i += 1
+                continue
+
+            # Check for numbered items
+            numbered_match = re.match(r'^\s*(\d+)\.\s+(.+)$', stripped)
+            if numbered_match:
+                item_text = numbered_match.group(2).strip()
+                current_section.numbered_items.append(item_text)
+                i += 1
+                continue
+
+            # Check for key:value or "key:" patterns
+            kv_match = re.match(r'^\*?\*?([^:]+)\*?\*?\s*:\s*$', stripped)
+            if kv_match and i + 1 < len(lines):
+                # Key with value on next lines (as bullets)
+                key = kv_match.group(1).strip().strip('*')
+                i += 1
+                continue
+
+            # Regular content
+            if stripped:
+                current_section.content.append(stripped)
+
+            i += 1
+
+        return root
+
+    def detect_domains(self, text: str) -> List[str]:
+        """Detect domains from text content."""
+        text_lower = text.lower()
+        detected = []
+        for domain, keywords in self.DOMAIN_KEYWORDS.items():
+            if any(kw in text_lower for kw in keywords):
+                detected.append(domain)
+        return detected if detected else ["general"]
+
+    def extract_role(self, text: str) -> Optional[str]:
+        """Extract role/persona from text."""
+        lines = text.split('\n')
+        for line in lines[:5]:  # Check first 5 lines
+            line_lower = line.lower()
+            if any(kw in line_lower for kw in self.ROLE_KEYWORDS):
+                # Extract the role description
+                # Remove common prefixes
+                role = line.strip()
+                role = re.sub(r'^>\s*', '', role)  # Remove blockquote
+                role = re.sub(r'^you are a?\s*', '', role, flags=re.IGNORECASE)
+                role = re.sub(r'\*\*(.+?)\*\*', r'\1', role)  # Remove bold
+                # Truncate and clean
+                role = role.strip().rstrip('.')
+                if len(role) > 100:
+                    role = role[:100]
+                return self._to_ssn_id(role)
+        return None
+
+    def extract_main_task(self, text: str) -> Optional[str]:
+        """Extract main task/objective from text."""
+        lines = text.split('\n')
+        for line in lines[:10]:
+            line_lower = line.lower()
+            if any(kw in line_lower for kw in self.TASK_KEYWORDS):
+                task = line.strip()
+                task = re.sub(r'^>\s*', '', task)
+                task = re.sub(r'\*\*(.+?)\*\*', r'\1', task)
+                # Find the main task description
+                for kw in self.TASK_KEYWORDS:
+                    if kw in task.lower():
+                        idx = task.lower().find(kw)
+                        task = task[idx + len(kw):].strip()
+                        break
+                task = task.strip().rstrip('.')
+                if len(task) > 80:
+                    task = task[:80]
+                return self._to_ssn_id(task)
+        return None
+
+    def _to_ssn_id(self, text: str) -> str:
+        """Convert text to SSN-compatible identifier."""
+        # Remove special characters, keep alphanumeric and spaces
+        text = re.sub(r'[^\w\s\-]', '', text)
+        # Replace spaces with underscores
+        text = re.sub(r'\s+', '_', text.strip())
+        # Limit length
+        if len(text) > 50:
+            text = text[:50].rsplit('_', 1)[0]
+        return text.lower()
+
+    def _to_ssn_value(self, text: str) -> str:
+        """Convert text to SSN value (can include more chars)."""
+        # Remove markdown formatting
+        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # Bold
+        text = re.sub(r'\*(.+?)\*', r'\1', text)  # Italic
+        text = re.sub(r'`(.+?)`', r'\1', text)  # Code
+        # Replace special chars
+        text = text.replace(':', '-').replace('|', '-')
+        text = re.sub(r'\s+', '_', text.strip())
+        return text
+
+    def _indent(self, level: int) -> str:
+        """Generate indentation."""
+        return ' ' * (level * self.indent_size)
+
+    def section_to_ssn(self, section: ParsedSection, depth: int = 0) -> List[str]:
+        """Convert a parsed section to SSN lines."""
+        lines = []
+        indent = self._indent(depth)
+
+        if section.title and section.title != "root":
+            # Convert section title to scope
+            scope_name = self._to_ssn_id(section.title)
+            lines.append(f"{indent}.{scope_name}")
+            depth += 1
+            indent = self._indent(depth)
+
+        # Add content as key-value or description
+        for content in section.content:
+            if ':' in content and not content.startswith('http'):
+                # Potential key-value
+                parts = content.split(':', 1)
+                if len(parts) == 2 and len(parts[0]) < 40:
+                    key = self._to_ssn_id(parts[0])
+                    value = self._to_ssn_value(parts[1])
+                    lines.append(f"{indent}>{key}:{value}")
+                else:
+                    lines.append(f"{indent}>{self._to_ssn_id('desc')}:{self._to_ssn_value(content)[:60]}")
+            elif content:
+                # Add as description if it seems important
+                if any(kw in content.lower() for kw in self.REQUIREMENT_KEYWORDS):
+                    lines.append(f"{indent}#{'_'.join(content.split()[:3]).lower()}")
+
+        # Add bullets as requirements or items
+        if section.bullets:
+            for bullet in section.bullets:
+                bullet_clean = self._to_ssn_value(bullet)
+                # Detect if it's a nested structure (contains sub-bullets)
+                if '**' in bullet or bullet.endswith(':'):
+                    # It's a category/header
+                    category = re.sub(r'\*\*(.+?)\*\*:?', r'\1', bullet).strip().rstrip(':')
+                    lines.append(f"{indent}.{self._to_ssn_id(category)}")
+                elif len(bullet) < 80:
+                    # Short enough to be a flag or simple item
+                    if any(kw in bullet.lower() for kw in ['must', 'should', 'require']):
+                        lines.append(f"{indent}#{self._to_ssn_id(bullet)[:50]}")
+                    else:
+                        lines.append(f"{indent}>{self._to_ssn_id('item')}:{bullet_clean[:70]}")
+                else:
+                    # Longer description
+                    lines.append(f"{indent}>{self._to_ssn_id(bullet[:25])}:{bullet_clean[:70]}")
+
+        # Add numbered items
+        if section.numbered_items:
+            for i, item in enumerate(section.numbered_items, 1):
+                item_clean = self._to_ssn_value(item)
+                lines.append(f"{indent}>step_{i}:{item_clean[:80]}")
+
+        # Recursively process subsections
+        for subsection in section.subsections:
+            lines.extend(self.section_to_ssn(subsection, depth))
+
+        return lines
+
+    def convert(self, text: str, context: Dict = None) -> str:
+        """
+        Convert a structured prompt to SSN format.
+
+        Args:
+            text: The structured prompt (markdown format)
+            context: Optional context dict
+
+        Returns:
+            SSN formatted string
+        """
+        context = context or {}
+
+        # Strip blockquotes if present
+        if text.strip().startswith('>'):
+            text = self._strip_blockquotes(text)
+
+        # Parse the markdown structure
+        parsed = self.parse_markdown(text)
+
+        # Extract high-level metadata
+        role = self.extract_role(text)
+        task = self.extract_main_task(text)
+        domains = self.detect_domains(text)
+
+        # Build SSN output
+        ssn_lines = []
+
+        # Add main action/command
+        if task:
+            ssn_lines.append(f"@prompt|{task[:40]}")
+        else:
+            ssn_lines.append("@prompt|structured_task")
+
+        # Add role if detected
+        if role:
+            ssn_lines.append(f">role:{role[:50]}")
+
+        # Add domains
+        ssn_lines.append(f">domain:{','.join(domains)}")
+
+        # Add expert flag if context says so
+        if context.get("expert_mode"):
+            ssn_lines.append("#expert")
+
+        # Convert all sections
+        for section in parsed.subsections:
+            ssn_lines.extend(self.section_to_ssn(section, 0))
+
+        # Only process root-level content/bullets if there are no subsections
+        # (to avoid duplication)
+        if not parsed.subsections and (parsed.content or parsed.bullets):
+            root_lines = self.section_to_ssn(parsed, 0)
+            # Skip the first line which would be ".root"
+            ssn_lines.extend(root_lines)
+
+        return '\n'.join(ssn_lines)
+
+
+class UnifiedConverter:
+    """
+    Unified converter that auto-detects prompt type and uses appropriate converter.
+    """
+
+    def __init__(self):
+        self.simple_converter = NLToSSN()
+        self.structured_converter = StructuredPromptConverter()
+
+    def convert(self, text: str, context: Dict = None) -> str:
+        """
+        Auto-detect prompt type and convert to SSN.
+
+        Args:
+            text: Input text (simple query or structured prompt)
+            context: Optional context dict
+
+        Returns:
+            SSN formatted string
+        """
+        prompt_type = self.structured_converter.detect_prompt_type(text)
+
+        if prompt_type == PromptType.STRUCTURED_PROMPT:
+            return self.structured_converter.convert(text, context)
+        else:
+            return self.simple_converter.convert(text, context)
+
+    def batch_convert(self, texts: List[str], context: Dict = None) -> List[str]:
+        """Convert multiple texts to SSN."""
+        return [self.convert(t, context) for t in texts]
+
+
 class SSNTemplates:
     """Pre-built SSN templates for common tasks."""
     
@@ -370,8 +790,14 @@ class SSNTemplates:
 
 # Convenience functions
 def nl_to_ssn(text: str, **context) -> str:
-    """Convert natural language to SSN."""
-    converter = NLToSSN()
+    """Convert natural language or structured prompt to SSN (auto-detects type)."""
+    converter = UnifiedConverter()
+    return converter.convert(text, context)
+
+
+def structured_to_ssn(text: str, **context) -> str:
+    """Convert structured prompt (markdown) to SSN."""
+    converter = StructuredPromptConverter()
     return converter.convert(text, context)
 
 

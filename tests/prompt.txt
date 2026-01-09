@@ -1,1 +1,125 @@
-Build a RAG pipeline for drug discovery
+You are a **senior AI architect specializing in computational drug discovery, bioinformatics, and scientific knowledge graphs**.
+Your task is to **design an end-to-end Retrieval-Augmented Generation (RAG) pipeline for drug discovery**, suitable for both **academic research and industry-grade deployment**.
+
+### 1. Problem Scope
+
+Design a RAG system that supports:
+
+* Target identification and validation
+* Mechanism-of-action reasoning
+* Ligand discovery and optimization
+* ADMET and safety assessment
+* Literature-grounded hypothesis generation
+
+The system must answer **scientific questions**, not general QA, and must provide **traceable, citable evidence**.
+
+---
+
+### 2. Knowledge Sources (Must Be Explicit)
+
+Specify how the pipeline ingests and harmonizes:
+
+* **Structured databases**:
+  * ChEMBL, DrugBank, PubChem, BindingDB
+  * UniProt, PDB, AlphaFold DB
+* **Unstructured data**:
+  * PubMed / PubMed Central full-text
+  * FDA labels, clinical trial reports
+  * Patents (optional but encouraged)
+* **Internal/private datasets** (assume protected biomedical IP)
+
+Explain:
+
+* Entity normalization (genes, proteins, ligands)
+* Ontology alignment (MeSH, GO, ChEBI, Disease Ontology)
+
+---
+
+### 3. Indexing & Retrieval Layer
+
+Design the retrieval system in detail:
+
+* Embedding models (biomedical-specific preferred)
+* Hybrid retrieval:
+  * Dense vectors (semantic)
+  * Sparse BM25 (lexical precision)
+  * Graph-based retrieval (protein-drug-disease links)
+* Chunking strategy for:
+  * Papers
+  * Protein structures
+  * Assay descriptions
+
+Explain why each choice is made.
+
+---
+
+### 4. Reasoning & Generation Layer
+
+The LLM must:
+
+* Perform **multi-hop biological reasoning**
+* Link molecular interactions -> pathways -> phenotypes
+* Handle uncertainty and conflicting evidence
+* Avoid hallucination through retrieval grounding
+
+Include:
+
+* Chain-of-Thought control strategies
+* Tool calling (docking, QSAR, MD, structure lookup)
+* Citation injection at sentence level
+
+---
+
+### 5. Example Queries (Must Handle)
+
+Show how the system would answer:
+
+1. "Is compound X likely to cross the BBB and modulate GABA-A receptors?"
+2. "What evidence supports target Y for glioblastoma?"
+3. "Suggest scaffold optimizations for improving selectivity against off-target Z."
+
+Provide **sample retrieved context** and **final grounded answers**.
+
+---
+
+### 6. Evaluation Strategy
+
+Define:
+
+* Scientific faithfulness metrics
+* Retrieval recall/precision
+* Hallucination detection
+* Expert-in-the-loop validation
+
+---
+
+### 7. Deployment Architecture
+
+Provide:
+
+* Modular architecture diagram (textual)
+* GPU/CPU separation
+* Offline indexing vs online inference
+* Security for proprietary drug data
+
+---
+
+### 8. Advanced Extensions (Required)
+
+Include at least:
+
+* Knowledge-graph-augmented RAG
+* Structure-aware embeddings
+* Active learning loop with wet-lab feedback
+* Integration with docking / MD / QSAR pipelines
+
+---
+
+### 9. Output Format
+
+Respond using:
+
+* Clear section headers
+* Technical depth (no high-level fluff)
+* Pseudocode where appropriate
+* Tables for model and database comparisons

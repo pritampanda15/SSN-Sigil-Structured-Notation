@@ -262,6 +262,111 @@ template("debug", error="segfault", context="C_extension", env="linux")
 
 ---
 
+## Structured Prompt → SSN Conversion (NEW)
+
+Convert complex, multi-section markdown prompts to SSN format. The converter auto-detects whether input is a simple query or a structured prompt.
+
+### CLI Usage
+
+```bash
+# Convert a structured prompt file
+ssn convert complex_prompt.md --full -o output.txt
+
+# Show token savings
+ssn convert complex_prompt.md --stats
+```
+
+### Example: Drug Discovery RAG Pipeline Prompt
+
+**Input (markdown format, ~824 tokens):**
+```markdown
+You are a **senior AI architect specializing in computational drug discovery**.
+Your task is to **design an end-to-end RAG pipeline for drug discovery**.
+
+### 1. Problem Scope
+Design a RAG system that supports:
+* Target identification and validation
+* Mechanism-of-action reasoning
+* Ligand discovery and optimization
+
+### 2. Knowledge Sources
+* **Structured databases**: ChEMBL, DrugBank, PubChem
+* **Unstructured data**: PubMed, FDA labels
+
+### 3. Retrieval Layer
+* Embedding models (biomedical-specific)
+* Hybrid retrieval: Dense + BM25 + Graph-based
+```
+
+**Output (SSN format, ~651 tokens, 20% reduction):**
+```
+@prompt|design_an_end-to-end_rag_pipeline
+>role:senior_ai_architect_specializing_in_computational
+>domain:drug_discovery,bioinformatics,nlp,data_engineering
+.problem_scope
+  >item:Target_identification_and_validation
+  >item:Mechanism-of-action_reasoning
+  >item:Ligand_discovery_and_optimization
+.knowledge_sources
+  .structured_databases
+  >item:ChEMBL,_DrugBank,_PubChem
+  .unstructured_data
+  >item:PubMed,_FDA_labels
+.retrieval_layer
+  >item:Embedding_models_(biomedical-specific)
+  .hybrid_retrieval
+  >item:Dense_+_BM25_+_Graph-based
+```
+
+### Supported Markdown Features
+
+| Feature | Example | SSN Output |
+|---------|---------|------------|
+| Headers | `### Section Name` | `.section_name` (scope) |
+| Bullet lists | `* Item one` | `>item:Item_one` |
+| Numbered lists | `1. Step one` | `>step_1:Step_one` |
+| Bold text | `**key term**` | Extracted as category |
+| Blockquotes | `> quoted text` | Auto-stripped |
+| Horizontal rules | `---` | Section separator |
+| Nested structures | Indented bullets | Nested scopes |
+
+### Python API
+
+```python
+from ssn import nl_to_ssn, structured_to_ssn
+from ssn.nl_converter import UnifiedConverter, StructuredPromptConverter
+
+# Auto-detect and convert (recommended)
+ssn_output = nl_to_ssn(markdown_prompt)
+
+# Force structured conversion
+ssn_output = structured_to_ssn(markdown_prompt)
+
+# Using converter classes directly
+converter = UnifiedConverter()
+ssn_output = converter.convert(text, context={"expert_mode": True})
+
+# Check prompt type
+structured_converter = StructuredPromptConverter()
+prompt_type = structured_converter.detect_prompt_type(text)
+# Returns: PromptType.SIMPLE_QUERY or PromptType.STRUCTURED_PROMPT
+```
+
+### Domain Detection
+
+The converter automatically detects domains from content:
+
+| Domain | Keywords |
+|--------|----------|
+| `drug_discovery` | drug, pharmaceutical, compound, ligand, admet |
+| `bioinformatics` | protein, gene, genomic, sequence, molecular |
+| `machine_learning` | model, training, neural, deep learning |
+| `nlp` | language, text, embedding, transformer, llm, rag |
+| `data_engineering` | pipeline, etl, database, indexing, retrieval |
+| `scientific` | research, hypothesis, evidence, literature |
+
+---
+
 ## Sigil Reference
 
 | Sigil | Name | Usage | Example |
@@ -489,18 +594,32 @@ to_dict(text, ssn=None) -> dict          # Alias for decode
 ### Natural Language Converter
 
 ```python
-from ssn import nl_to_ssn, template, NLToSSN, SSNTemplates
+from ssn import nl_to_ssn, structured_to_ssn, template
+from ssn.nl_converter import NLToSSN, SSNTemplates, UnifiedConverter, StructuredPromptConverter, PromptType
 
-nl_to_ssn(text, **context) -> str        # Convert natural language to SSN
-template(name, **kwargs) -> str          # Fill a predefined template
+# Auto-detect prompt type and convert (recommended)
+nl_to_ssn(text, **context) -> str        # Convert NL or structured prompt to SSN
+
+# Force structured prompt conversion
+structured_to_ssn(text, **context) -> str # Convert markdown prompt to SSN
+
+# Fill a predefined template
+template(name, **kwargs) -> str
 
 # Available templates: search, explain, compare, code, debug, analyze, summarize, recommend
 
-# Context options for nl_to_ssn:
-#   expert_mode=True      -> adds #no_basics
+# Context options:
+#   expert_mode=True      -> adds #no_basics or #expert
 #   include_code=True     -> adds #code_examples
-#   default_depth="deep"  -> sets depth level
-#   default_language="python" -> for code queries
+
+# Classes
+UnifiedConverter()                        # Auto-detects and uses appropriate converter
+StructuredPromptConverter()               # For complex markdown prompts
+NLToSSN()                                 # For simple one-line queries
+
+# Prompt type detection
+PromptType.SIMPLE_QUERY                   # One-liner queries
+PromptType.STRUCTURED_PROMPT              # Multi-section markdown prompts
 ```
 
 ---

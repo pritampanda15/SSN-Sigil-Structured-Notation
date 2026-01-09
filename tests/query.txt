@@ -1,0 +1,77 @@
+SYSTEM PROMPT:
+---
+You understand SSN (Sigil Structured Notation) - a token-efficient format:
+@ = action/command with |args
+> = key:value pair
+# = boolean flag (presence = true)
+. = nested scope
+
+Parse SSN queries and respond with detailed, actionable output.
+---
+
+USER QUERY:
+---
+@prompt|design_an_end-to-end_retrieval-augmented
+>role:senior_ai_architect_specializing_in_computational
+>domain:drug_discovery,bioinformatics,machine_learning,nlp,data_engineering,scientific
+.problem_scope
+  #the_system_must
+  >item:Target_identification_and_validation
+  >item:Mechanism-of-action_reasoning
+  >item:Ligand_discovery_and_optimization
+  >item:ADMET_and_safety_assessment
+  >item:Literature-grounded_hypothesis_generation
+.knowledge_sources_must_be_explicit
+  .structured_databases
+  >item:ChEMBL,_DrugBank,_PubChem,_BindingDB
+  >item:UniProt,_PDB,_AlphaFold_DB
+  .unstructured_data
+  >item:PubMed_/_PubMed_Central_full-text
+  >item:FDA_labels,_clinical_trial_reports
+  >item:Patents_(optional_but_encouraged)
+  .internalprivate_datasets_assume_protected
+  >item:Entity_normalization_(genes,_proteins,_ligands)
+  >item:Ontology_alignment_(MeSH,_GO,_ChEBI,_Disease_Ontology)
+.indexing_retrieval_layer
+  >item:Embedding_models_(biomedical-specific_preferred)
+  .hybrid_retrieval
+  >item:Dense_vectors_(semantic)
+  >item:Sparse_BM25_(lexical_precision)
+  >item:Graph-based_retrieval_(protein-drug-disease_links)
+  .chunking_strategy_for
+  >item:Papers
+  >item:Protein_structures
+  >item:Assay_descriptions
+.reasoning_generation_layer
+  .perform_multi-hop_biological_reasoning
+  >item:Link_molecular_interactions_->_pathways_->_phenotypes
+  >item:Handle_uncertainty_and_conflicting_evidence
+  >item:Avoid_hallucination_through_retrieval_grounding
+  >item:Chain-of-Thought_control_strategies
+  >item:Tool_calling_(docking,_QSAR,_MD,_structure_lookup)
+  >item:Citation_injection_at_sentence_level
+.example_queries_must_handle
+  >step_1:"Is_compound_X_likely_to_cross_the_BBB_and_modulate_GABA-A_receptors?"
+  >step_2:"What_evidence_supports_target_Y_for_glioblastoma?"
+  >step_3:"Suggest_scaffold_optimizations_for_improving_selectivity_against_off-target_Z."
+.evaluation_strategy
+  >item:Scientific_faithfulness_metrics
+  >item:Retrieval_recall/precision
+  >item:Hallucination_detection
+  >item:Expert-in-the-loop_validation
+.deployment_architecture
+  >item:Modular_architecture_diagram_(textual)
+  >item:GPU/CPU_separation
+  >item:Offline_indexing_vs_online_inference
+  >item:Security_for_proprietary_drug_data
+.advanced_extensions_required
+  >item:Knowledge-graph-augmented_RAG
+  >item:Structure-aware_embeddings
+  >item:Active_learning_loop_with_wet-lab_feedback
+  >item:Integration_with_docking_/_MD_/_QSAR_pipelines
+.output_format
+  >item:Clear_section_headers
+  >item:Technical_depth_(no_high-level_fluff)
+  >item:Pseudocode_where_appropriate
+  >item:Tables_for_model_and_database_comparisons
+---

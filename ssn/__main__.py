@@ -19,7 +19,7 @@ from pathlib import Path
 from .core import SSN
 from .parser import parse_file
 from .encoder import encode
-from .nl_converter import nl_to_ssn, template, NLToSSN, SSNTemplates
+from .nl_converter import nl_to_ssn, template, NLToSSN, SSNTemplates, UnifiedConverter, StructuredPromptConverter
 
 
 # System prompt for LLMs to understand SSN
@@ -60,15 +60,16 @@ def cmd_convert(args):
         text = Path(args.input).read_text().strip()
     else:
         text = args.input  # Direct text input
-    
+
     # Convert to SSN
     context = {}
     if args.expert:
         context["expert_mode"] = True
     if args.code:
         context["include_code"] = True
-    
-    converter = NLToSSN()
+
+    # Use UnifiedConverter which auto-detects prompt type
+    converter = UnifiedConverter()
     ssn_output = converter.convert(text, context)
     
     # Build final output
